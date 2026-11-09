@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Local server for the Hungarian trainer. Usage: python3 serve.py [port]  →  http://localhost:8780
+
+Speech recognition and the microphone need a "secure context"; localhost counts as one,
+so open the app through this server rather than double-clicking index.html.
+It also serves /api/listen: the newest episodes and videos from podcasts and YouTube channels
+for learners of Hungarian (listen.py).
+"""
+import http.server
+import os
+import socketserver
+import sys
+import webbrowser
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # serve the app's own folder, wherever it is started from
+
+import listen  # noqa: E402
+
+PORT = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8780)
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # Always revalidate so edits and updates show up without a hard refresh.
+        self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
+    def do_GET(self):
+        feed = {"/api/listen": listen.get_listen}.get(self.path.split("?")[0])
+        if feed:
+            try:
+                body = feed(force="refresh=1" in self.path)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+            except Exception as e:  # network down, etc.
+                body = ('{"error": "%s", "items": [], "sources": []}' % str(e).replace('"', "'")).encode()
+                self.send_response(502)
+                self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
+
+    def log_message(self, *args):
+        pass
+
+
+Handler.extensions_map[".js"] = "text/javascript"
+
+
+class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+if __name__ == "__main__":
+    with Server(("127.0.0.1", PORT), Handler) as httpd:
+        url = f"http://localhost:{PORT}"
+        print(f"Magyar trainer is running at {url}  (Ctrl+C to stop)")
+        if "--no-open" not in sys.argv:
+            webbrowser.open(url)
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            pass

@@ -1,0 +1,9 @@
+{
+  "name": "hungarian-trainer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 serve.py",
+    "test": "node tests/hu.js && node tests/checker.js && node tests/content.js && node tests/srs.js && node tests/transcript.js"
+  }
+}
